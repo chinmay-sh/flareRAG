@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env
+*.log
+.ingest-manifest.json
+.ingest-manifest.json.tmp
+r2-upload.json
+.r2-uploaded.txt
+wrangler.generated.jsonc
+# Per-corpus secrets (real MCP_TOKEN etc.), expanded into ${...} placeholders in corpora/<name>.jsonc
+corpora/*.env
+.r2-uploaded.*.txt
+.ingest-manifest.*.json
+.ingest-manifest.*.json.tmp

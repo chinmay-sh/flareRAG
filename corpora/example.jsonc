@@ -1,0 +1,19 @@
+{
+  // Copy this file to corpora/<name>.jsonc and replace the example values.
+  "worker": "mycorpus-search",
+  // Optional R2 bucket for get_full_document and list_documents.
+  "r2_bucket": "mycorpus-bucket",
+  // Optional default folder for npm run ingest and npm run r2:upload.
+  "docs_dir": "C:/path/to/docs",
+  "vars": {
+    "PINECONE_NAMESPACE": "docs",
+    "PINECONE_INDEX_HOST": "your-index-xxxx.svc.aped-xxxx.pinecone.io",
+    "MCP_TOKEN": "${MCP_TOKEN}",
+    "EMBED_MODEL": "voyage-4-large",
+    "COLLECTION_NAME": "My document collection",
+    "COLLECTION_DESCRIPTION": "Describe the documents in this collection.",
+    "SEARCH_TIPS": "Describe useful terms and query patterns.",
+    "EXAMPLE_QUERY": "What is this collection about?"
+    // Optional: "CHUNK_MIN_SIZE": "1200"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "flarerag",
+  "version": "1.0.0",
+  "description": "Semantic search MCP server on Cloudflare Workers: Voyage/Gemini embeddings + Pinecone + Voyage rerank",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx scripts/wrangler.ts dev",
+    "deploy": "tsx scripts/wrangler.ts deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/chunker.test.ts && tsx tests/dedupe.test.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "check": "tsx scripts/check-setup.ts",
+    "r2:list": "tsx scripts/r2-list.ts",
+    "r2:upload": "tsx scripts/r2-upload.ts",
+    "wrangler": "tsx scripts/wrangler.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.24.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1135.0",
+    "@cloudflare/workers-types": "^5.20260918.1",
+    "@types/node": "^22.13.5",
+    "dotenv": "^16.4.7",
+    "jsonc-parser": "^3.3.1",
+    "tsx": "^4.19.3",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.135.0"
+  },
+  "type": "module"
+}

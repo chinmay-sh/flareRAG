@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Shared Worker settings for every corpus. Corpus-specific settings (Worker name, R2 bucket,
+  // Pinecone namespace, descriptions, token) live in corpora/<name>.jsonc.
+  //
+  // Don't run `wrangler deploy` directly: use `npm run deploy` / `npm run dev` / `npm run wrangler -- …`,
+  // which merge this file with the selected corpus into wrangler.generated.jsonc.
+  "name": "docs-search",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  },
+  // Daily keep-alive query so the free Pinecone index never counts as idle.
+  "triggers": {
+    "crons": [
+      "0 3 * * *"
+    ]
+  },
+  // Defaults shared by all corpora; a corpus file can override any of them.
+  // EMBED_* must match between ingest and search, so changing them requires re-ingesting.
+  "vars": {
+    "EMBED_PROVIDER": "voyage",
+    "EMBED_DIMENSIONS": "1024",
+    "RERANK_MODEL": "rerank-2.5",
+  },
+  // R2 is configured per corpus in corpora/<name>.jsonc.
+  // Secrets, set once per Worker: npm run wrangler -- secret put PINECONE_API_KEY [--corpus …]
+  //   PINECONE_API_KEY, VOYAGE_API_KEY (and/or GEMINI_API_KEY); MCP_TOKEN unless set in the corpus vars
+}

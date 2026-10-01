@@ -1,0 +1,14 @@
+# Local secrets for `npm run dev` (copy to .dev.vars); shared by all corpora.
+# Production: npm run wrangler -- secret put <NAME> [--corpus corpora/<name>.jsonc]
+
+PINECONE_API_KEY="pcsk_..."
+
+# Needed for EMBED_PROVIDER=voyage and for reranking
+VOYAGE_API_KEY="pa-..."
+
+# Needed only for EMBED_PROVIDER=gemini
+# GEMINI_API_KEY="..."
+
+# Optional: overrides the corpus's MCP_TOKEN var during local dev (the real value normally
+# lives in corpora/<name>.env, gitignored)
+# MCP_TOKEN="..."
