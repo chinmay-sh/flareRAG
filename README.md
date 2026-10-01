@@ -2,7 +2,7 @@
 
 # 🔭 flareRAG
 
-**Turn any folder of documents into a search engine Claude can use.**
+**Turn any folder of documents into a search engine for MCP clients.**
 
 Semantic search · reranking · one MCP server per collection · runs entirely on free tiers
 
@@ -15,7 +15,7 @@ Semantic search · reranking · one MCP server per collection · runs entirely o
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Cost](https://img.shields.io/badge/cost-%240%20free%20tiers-2EA44F)
 
-[Quick start](#-quick-start) · [Add a corpus](#-add-a-new-corpus) · [Connect Claude](#-connect-claude) · [Everyday tasks](#-everyday-tasks) · [Reference](#-reference) · [Troubleshooting](#-troubleshooting)
+[Quick start](#-quick-start) · [Add a corpus](#-add-a-new-corpus) · [Connect an MCP client](#-connect-an-mcp-client) · [Everyday tasks](#-everyday-tasks) · [Reference](#-reference) · [Troubleshooting](#-troubleshooting)
 
 </div>
 
@@ -23,7 +23,7 @@ Semantic search · reranking · one MCP server per collection · runs entirely o
 
 ## ✨ What it does
 
-> Point it at a folder of `.md` / `.txt` files. It indexes them once from your PC, then serves an **MCP server on Cloudflare** that Claude can ask questions like *"what does the collection say about X?"*. Claude gets back the most relevant passages with their source files.
+> Point it at a folder of `.md` / `.txt` files. It indexes them once from your PC, then serves an **MCP server on Cloudflare** that any compatible client can ask questions like *"what does the collection say about X?"*. The client gets back the most relevant passages with their source files.
 
 - 🧠 **Search by meaning**, not keywords: ask in plain English (or Hindi, or IAST Sanskrit).
 - 🎯 **Two-stage retrieval**: vector search finds 40 candidates, duplicates are merged, then a reranker picks the best 5.
@@ -50,7 +50,7 @@ flowchart LR
         DD --> RR["🏆 Rerank → top 5"]
     end
 
-    U["🤖 Claude / MCP client"] -->|/mcp| Q
+    U["🤖 MCP client"] -->|/mcp| Q
     S <--> P
     RR -->|passages + sources| U
     U -.->|read full document| R
@@ -201,7 +201,7 @@ node -e "console.log('MCP_TOKEN=' + require('crypto').randomBytes(18).toString('
 > fails loudly before anything is deployed.
 
 > [!TIP]
-> Write the **description** carefully. Claude reads it to decide *when* to use your server and *how* to phrase its searches.
+> Write the **description** carefully. MCP clients read it to decide *when* to use your server and *how* to phrase their searches.
 
 ### 3️⃣ Select and check
 
@@ -248,11 +248,13 @@ npm run deploy
 ```
 🩺 Open `https://mycorpus-search.<subdomain>.workers.dev/health`; it should return `"status": "ok"`.
 
-### 8️⃣ Connect Claude → [see below](#-connect-claude)
+### 8️⃣ Connect an MCP client → [see below](#-connect-an-mcp-client)
 
 ---
 
-## 🔌 Connect Claude
+## 🔌 Connect an MCP client
+
+The server works with any client that supports MCP Streamable HTTP. The examples below cover Claude Desktop, Claude Code, and the MCP Inspector.
 
 <details open>
 <summary><b>🖥️ Claude Desktop</b></summary>
@@ -293,6 +295,27 @@ claude mcp add --transport http mycorpus https://mycorpus-search.<subdomain>.wor
 </details>
 
 <details>
+<summary><b>🚀 Antigravity</b></summary>
+
+<br>
+
+```json
+{
+  "mcpServers": {
+    "mycorpus": {
+      "serverUrl": "https://mycorpus-search.<subdomain>.workers.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_TOKEN>",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
 <summary><b>🔬 MCP Inspector (debugging)</b></summary>
 
 <br>
@@ -317,7 +340,7 @@ Connect with transport **Streamable HTTP** to `http://localhost:8787/mcp` (local
 | 🧪 Try searches locally | `npm run dev` → open http://localhost:8787 |
 | 🔑 Change a secret | `npm run wrangler -- secret put <NAME>` |
 | 📜 Watch live logs | `npm run wrangler -- tail` |
-| 🔄 Rotate the token | New `MCP_TOKEN` in `corpora/<name>.env` → `npm run deploy` → update the Claude config |
+| 🔄 Rotate the token | New `MCP_TOKEN` in `corpora/<name>.env` → `npm run deploy` → update the MCP client config |
 
 ### 🧬 Changing the embedding model
 
@@ -370,9 +393,9 @@ All commands accept `-- --corpus <name or path>`; otherwise they use `CORPUS` fr
 | `vars.MCP_TOKEN` | ✅* | Bearer token — `${MCP_TOKEN}` placeholder expanded from `corpora/<name>.env` (*or a secret: `npm run wrangler -- secret put MCP_TOKEN`, not both) |
 | `vars.CHUNK_SIZE` · `CHUNK_OVERLAP` · `CHUNK_MIN_SIZE` | | Defaults `2000` · `200` · `0` |
 | `vars.COLLECTION_NAME` | | Short name (server name, test page title) |
-| `vars.COLLECTION_DESCRIPTION` | ⭐ | What the documents are; guides Claude |
+| `vars.COLLECTION_DESCRIPTION` | ⭐ | What the documents are; guides MCP clients |
 | `vars.SEARCH_TIPS` | | Query advice added to the search tool |
-| `vars.EXAMPLE_QUERY` | | Example shown to Claude |
+| `vars.EXAMPLE_QUERY` | | Example shown to MCP clients |
 
 </details>
 
