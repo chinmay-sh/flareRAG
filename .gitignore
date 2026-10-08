@@ -14,3 +14,7 @@ corpora/*.env
 .r2-uploaded.*.txt
 .ingest-manifest.*.json
 .ingest-manifest.*.json.tmp
+
+!example.jsonc
+
+*.jsonc
