@@ -18,6 +18,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import "dotenv/config";
 import { parse, type ParseError } from "jsonc-parser";
+import { resolveEmbeddingSettings } from "../../src/services/embeddings";
 
 export const WRANGLER_BASE_PATH = path.resolve("wrangler.jsonc");
 export const WRANGLER_GENERATED_PATH = path.resolve("wrangler.generated.jsonc");
@@ -32,6 +33,8 @@ export interface CorpusFile {
   r2_bucket?: string;
   /** Optional default docs folder for `npm run ingest` / `npm run r2:upload`. */
   docs_dir?: string;
+  /** Opt in to contextual chunk embeddings (Voyage only); defaults to false. */
+  context_embedding_enabled?: boolean;
   /** Worker vars, merged over the shared ones in wrangler.jsonc. Also read by the scripts. */
   vars: Record<string, string>;
 }
@@ -132,6 +135,9 @@ export function readCorpus(ref: string | undefined): CorpusConfig {
   const corpus = path.basename(file).replace(/\.jsonc?$/, "");
   const data = readJsonc<CorpusFile>(file);
   if (!data.worker) throw new Error(`${path.relative(".", file)}: "worker" (the Worker name) is required.`);
+  if (data.context_embedding_enabled !== undefined && typeof data.context_embedding_enabled !== "boolean") {
+    throw new Error(`${path.relative(".", file)}: context_embedding_enabled must be a boolean (true or false).`);
+  }
 
   // Secrets ride along in a gitignored .env next to the corpus file (corpora/<name>.env).
   const secretsPath = file.replace(/\.jsonc?$/, ".env");
@@ -141,7 +147,12 @@ export function readCorpus(ref: string | undefined): CorpusConfig {
   const expandedVars = Object.fromEntries(
     Object.entries(data.vars ?? {}).map(([k, v]) => [k, expandPlaceholders(v, corpusSecrets, file, k)])
   );
-  const mergedVars = { ...(base.vars ?? {}), ...expandedVars };
+  const contextEmbeddingEnabled = data.context_embedding_enabled ?? false;
+  const mergedVars: Record<string, string> = {
+    ...(base.vars ?? {}), ...expandedVars,
+    CONTEXT_EMBEDDING_ENABLED: String(contextEmbeddingEnabled),
+  };
+  resolveEmbeddingSettings(mergedVars);
   for (const key of REQUIRED_VARS) {
     if (!mergedVars[key]) throw new Error(`${path.relative(".", file)}: vars.${key} is required.`);
   }
@@ -151,6 +162,7 @@ export function readCorpus(ref: string | undefined): CorpusConfig {
 
   return {
     ...data,
+    context_embedding_enabled: contextEmbeddingEnabled,
     vars: data.vars ?? {},
     corpus,
     file,

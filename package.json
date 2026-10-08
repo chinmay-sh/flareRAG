@@ -7,7 +7,7 @@
     "dev": "tsx scripts/wrangler.ts dev",
     "deploy": "tsx scripts/wrangler.ts deploy",
     "typecheck": "tsc --noEmit",
-    "test": "tsx tests/chunker.test.ts && tsx tests/dedupe.test.ts",
+    "test": "tsx tests/chunker.test.ts && tsx tests/dedupe.test.ts && tsx tests/embeddings.test.ts && tsx tests/corpus.test.ts && tsx tests/ingest.test.ts",
     "ingest": "tsx scripts/ingest.ts",
     "check": "tsx scripts/check-setup.ts",
     "r2:list": "tsx scripts/r2-list.ts",

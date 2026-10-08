@@ -25,10 +25,16 @@ function estimateTokens(text: string): number {
 }
 
 export const DEFAULT_VOYAGE_EMBED_MODEL = "voyage-4";
+export const DEFAULT_VOYAGE_CONTEXT_MODEL = "voyage-context-4";
 export const DEFAULT_RERANK_MODEL = "rerank-2.5";
 
 interface EmbeddingResponse {
   data: { embedding: number[]; index: number }[];
+  usage: { total_tokens: number };
+}
+
+interface ContextualizedEmbeddingResponse {
+  data: { index: number; data: { embedding: number[]; index: number }[] }[];
   usage: { total_tokens: number };
 }
 
@@ -117,6 +123,138 @@ export class VoyageEmbedder implements Embedder {
     const out: number[][] = new Array(texts.length);
     for (const item of res.data) out[item.index] = item.embedding;
     return out;
+  }
+}
+
+// Individual chunks are limited to 32K tokens. Context-4 caps pre-chunked requests
+// at 32K; context-3 allows 120K across documents. Keep estimation headroom.
+const CONTEXT_TOKEN_LIMIT = 32_000;
+const CONTEXT_MAX_INPUTS = 1000;
+const CONTEXT_MAX_CHUNKS = 16_000;
+
+/** Voyage contextual embeddings: one ordered chunk group per source document. */
+export class VoyageContextualizedEmbedder implements Embedder {
+  readonly provider = "voyage";
+  tokensUsed = 0;
+
+  constructor(
+    private apiKey: string,
+    readonly model: string = DEFAULT_VOYAGE_CONTEXT_MODEL,
+    readonly dimensions: number = 1024
+  ) {
+    if (!apiKey) throw new Error("VOYAGE_API_KEY is required for EMBED_PROVIDER=voyage.");
+  }
+
+  async embedQuery(query: string): Promise<number[]> {
+    const [embedding] = await this.embedBatch([[query]], "query");
+    return embedding;
+  }
+
+  /** A flat list here is the ordered chunks of one document. */
+  embedDocuments(texts: string[]): Promise<number[][]> {
+    return this.embedDocumentGroups([texts]);
+  }
+
+  async embedDocumentGroups(documents: string[][]): Promise<number[][]> {
+    const requestBudget = this.requestTokenBudget;
+    const out: number[][] = [];
+    let batch: string[][] = [];
+    let batchTokens = 0;
+    let batchChunks = 0;
+
+    // Long documents use consecutive context windows, never chunks from other documents.
+    for (const { texts, tokens } of this.documentWindows(documents)) {
+      if (batch.length && (batch.length >= CONTEXT_MAX_INPUTS ||
+        batchChunks + texts.length > CONTEXT_MAX_CHUNKS || batchTokens + tokens > requestBudget)) {
+        out.push(...await this.embedDocumentBatch(batch));
+        batch = [];
+        batchTokens = 0;
+        batchChunks = 0;
+      }
+      batch.push(texts);
+      batchTokens += tokens;
+      batchChunks += texts.length;
+    }
+    if (batch.length) out.push(...await this.embedDocumentBatch(batch));
+    return out;
+  }
+
+  private get requestTokenBudget(): number {
+    return (this.model === "voyage-context-4" ? CONTEXT_TOKEN_LIMIT : 120_000) * BUDGET_FRACTION;
+  }
+
+  private *documentWindows(documents: string[][]): Generator<{ texts: string[]; tokens: number }> {
+    const budget = this.requestTokenBudget;
+    for (const document of documents) {
+      let texts: string[] = [];
+      let tokens = 0;
+      for (const text of document) {
+        const estimated = estimateTokens(text);
+        if (estimated > CONTEXT_TOKEN_LIMIT * BUDGET_FRACTION) {
+          throw new Error("A chunk exceeds the Voyage context token budget. Reduce CHUNK_SIZE and re-ingest.");
+        }
+        if (texts.length && (tokens + estimated > budget || texts.length >= CONTEXT_MAX_CHUNKS)) {
+          yield { texts, tokens };
+          texts = [];
+          tokens = 0;
+        }
+        texts.push(text);
+        tokens += estimated;
+      }
+      if (texts.length) yield { texts, tokens };
+    }
+  }
+
+  private async embedDocumentBatch(documents: string[][]): Promise<number[][]> {
+    try {
+      return await this.embedBatch(documents, "document");
+    } catch (err) {
+      const tooBig = err instanceof Error &&
+        /TOO_MANY_TOKENS|TOO_MANY_CHUNKS|max allowed tokens|exceed.*(?:token|chunk)|(?:token|chunk).*(?:limit|maximum|exceed)/i.test(err.message);
+      if (!tooBig) throw err;
+      if (documents.length > 1) {
+        const mid = Math.ceil(documents.length / 2);
+        return [...await this.embedDocumentBatch(documents.slice(0, mid)),
+          ...await this.embedDocumentBatch(documents.slice(mid))];
+      }
+      const chunks = documents[0];
+      if (chunks.length <= 1) throw err;
+      const mid = Math.ceil(chunks.length / 2);
+      return [...await this.embedDocumentBatch([chunks.slice(0, mid)]),
+        ...await this.embedDocumentBatch([chunks.slice(mid)])];
+    }
+  }
+
+  private async embedBatch(inputs: string[][], inputType: "query" | "document"): Promise<number[][]> {
+    const res = await postJsonWithRetry<ContextualizedEmbeddingResponse>(
+      `${VOYAGE_BASE_URL}/contextualizedembeddings`,
+      voyageHeaders(this.apiKey),
+      {
+        inputs,
+        model: this.model,
+        input_type: inputType,
+        output_dimension: this.dimensions,
+        output_dtype: "float",
+      },
+      "Voyage contextual embeddings"
+    );
+    this.tokensUsed += res.usage?.total_tokens ?? 0;
+    const groups: number[][][] = new Array(inputs.length);
+    const invalidResponse = () => new Error("Voyage contextual embeddings returned invalid or missing vectors.");
+    if (!Array.isArray(res.data) || res.data.length !== inputs.length) throw invalidResponse();
+    for (const group of res.data) {
+      if (!Number.isInteger(group.index) || group.index < 0 || group.index >= inputs.length || groups[group.index] ||
+        !Array.isArray(group.data) || group.data.length !== inputs[group.index].length) throw invalidResponse();
+      const vectors: number[][] = new Array(inputs[group.index].length);
+      for (const item of group.data) {
+        if (!Number.isInteger(item.index) || item.index < 0 || item.index >= vectors.length || vectors[item.index] ||
+          !Array.isArray(item.embedding) || item.embedding.length !== this.dimensions ||
+          !item.embedding.every((value) => typeof value === "number" && Number.isFinite(value))) throw invalidResponse();
+        vectors[item.index] = item.embedding;
+      }
+      groups[group.index] = vectors;
+    }
+    return groups.flat();
   }
 }
 

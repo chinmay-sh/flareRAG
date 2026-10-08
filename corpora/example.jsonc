@@ -5,6 +5,9 @@
   "r2_bucket": "mycorpus-bucket",
   // Optional default folder for npm run ingest and npm run r2:upload.
   "docs_dir": "C:/path/to/docs",
+  // Context embeddings are supported only for Voyage models for now (default: false).
+  // When true, set vars.EMBED_MODEL to "voyage-context-4" or "voyage-context-3".
+  "context_embedding_enabled": false,
   "vars": {
     "PINECONE_NAMESPACE": "docs",
     "PINECONE_INDEX_HOST": "your-index-xxxx.svc.aped-xxxx.pinecone.io",

@@ -19,6 +19,7 @@ export default {
         embedProvider: env.EMBED_PROVIDER || "voyage",
         embedModel: env.EMBED_MODEL || "(provider default)",
         dimensions: env.EMBED_DIMENSIONS || "1024",
+        contextEmbeddingEnabled: env.CONTEXT_EMBEDDING_ENABLED === "true",
         rerankModel: env.RERANK_MODEL || "rerank-2.5",
         pineconeConfigured: Boolean(env.PINECONE_INDEX_HOST && env.PINECONE_API_KEY),
         r2Configured: Boolean(env.DOCS_BUCKET),

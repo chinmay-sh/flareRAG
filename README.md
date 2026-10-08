@@ -174,6 +174,7 @@ cp corpora/example.env.example corpora/mycorpus.env
   "worker": "mycorpus-search",        // → https://mycorpus-search.<subdomain>.workers.dev
   "r2_bucket": "mycorpus-bucket",     // optional: raw files for "read full document"
   "docs_dir": "C:/path/to/docs",      // default folder for ingest + upload
+  "context_embedding_enabled": false, // opt in to Voyage contextual embeddings
 
   "vars": {
     "PINECONE_INDEX_HOST": "mycorpus-abc1234.svc.aped-1234-a5b6.pinecone.io",
@@ -344,12 +345,26 @@ Connect with transport **Streamable HTTP** to `http://localhost:8787/mcp` (local
 
 ### 🧬 Changing the embedding model
 
+To use contextual embeddings, set the top-level `context_embedding_enabled` field to `true`
+in your corpus JSONC and set `vars.EMBED_MODEL` to `voyage-context-4` (or `voyage-context-3`).
+Only Voyage supports context embeddings for now; the flag defaults to `false` when omitted.
+If no model is specified, contextual mode defaults to `voyage-context-4`.
+Ingestion sends each document's ordered chunks together to Voyage's
+[contextualized embeddings endpoint](https://docs.voyageai.com/docs/contextualized-chunk-embeddings#rest-api),
+and search queries use that same endpoint and model. Long documents are split into consecutive
+context windows within Voyage's request token limit (32K for pre-chunked `voyage-context-4`,
+120K for `voyage-context-3`), with conservative estimation headroom;
+an API token-limit rejection can split a window further. Context is shared within each window.
+Voyage recommends non-overlapping chunks, so consider setting `vars.CHUNK_OVERLAP` to `"0"`.
+Switching contextual mode requires `npm run ingest -- --force`, followed by `npm run deploy`.
+
 | Change | Re-ingest? |
 |---|---|
 | Within Voyage 4 (`voyage-4-large` ↔ `voyage-4` ↔ `voyage-4-lite`) | **No.** They share one embedding space; just `npm run deploy` |
 | Another provider or family (e.g. Gemini) | **Yes:** `npm run ingest -- --force` |
 | `EMBED_DIMENSIONS` | **Yes**, into a **new index** with that dimension |
 | Chunking (`CHUNK_SIZE` / `CHUNK_OVERLAP` / `CHUNK_MIN_SIZE`) | **Yes:** `npm run ingest -- --force` |
+| `context_embedding_enabled` | **Yes:** `npm run ingest -- --force` |
 
 ---
 
@@ -385,6 +400,7 @@ All commands accept `-- --corpus <name or path>`; otherwise they use `CORPUS` fr
 | `worker` | ✅ | Worker name, which becomes part of the URL |
 | `r2_bucket` | | Bucket with the raw files |
 | `docs_dir` | | Default folder for ingest and upload |
+| `context_embedding_enabled` | | Boolean, default `false`; Voyage only. When `true`, use `voyage-context-4` or `voyage-context-3` |
 | `vars.PINECONE_INDEX_HOST` | ✅ | Index host |
 | `vars.PINECONE_NAMESPACE` | ✅ | Namespace inside the index |
 | `vars.EMBED_MODEL` | | e.g. `voyage-4-large`, `voyage-4`, `voyage-4-lite`, `gemini-embedding-001` |

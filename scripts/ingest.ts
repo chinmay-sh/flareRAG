@@ -14,7 +14,7 @@ import * as path from "node:path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { loadCorpusFromArgs } from "./lib/corpus";
 import { chunkDocument, extractTitle, sha256Hex, type DocumentChunk } from "../src/ingest/chunker";
-import { createEmbedder } from "../src/services/embeddings";
+import { createEmbedder, embedDocumentGroups, resolveEmbeddingSettings } from "../src/services/embeddings";
 import { PineconeClient, type PineconeRecord } from "../src/services/pinecone";
 import { listDocuments } from "../src/ingest/files";
 
@@ -57,6 +57,7 @@ interface IndexSignature {
   provider: string;
   model: string;
   dimensions: number;
+  contextEmbeddingEnabled: boolean;
   chunkSize: number;
   chunkOverlap: number;
   chunkMinSize: number;
@@ -67,7 +68,10 @@ function loadManifest(sig: IndexSignature): Manifest {
   adoptLegacyManifest(sig);
   if (!fs.existsSync(MANIFEST_PATH)) return fresh;
   const m = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf-8")) as Manifest;
-  if (m.index) m.index.chunkMinSize ??= 0; // manifests written before small-section merging existed
+  if (m.index) {
+    m.index.chunkMinSize ??= 0; // manifests written before small-section merging existed
+    m.index.contextEmbeddingEnabled ??= false;
+  }
   const changed = (Object.keys(sig) as (keyof IndexSignature)[]).filter((k) =>
     k === "model" ? modelFamily(m.index?.model) !== modelFamily(sig.model) : m.index?.[k] !== sig[k]
   );
@@ -178,10 +182,8 @@ function contentType(file: string) {
 async function main() {
   if (!fs.existsSync(DOCS_DIR) || !fs.statSync(DOCS_DIR).isDirectory()) fail(`Directory not found: ${DOCS_DIR}`);
 
-  const provider = (process.env.EMBED_PROVIDER || "voyage").toLowerCase();
-  const dimensions = parseInt(process.env.EMBED_DIMENSIONS || "1024", 10);
+  const { provider, model, dimensions, contextEmbeddingEnabled } = resolveEmbeddingSettings(process.env);
   const embedder = DRY_RUN ? null : createEmbedder(process.env);
-  const model = embedder?.model ?? (process.env.EMBED_MODEL || (provider === "gemini" ? "gemini-embedding-001" : "voyage-4"));
   const namespace = process.env.PINECONE_NAMESPACE || "docs";
   const host = DRY_RUN ? process.env.PINECONE_INDEX_HOST ?? "" : requireEnv("PINECONE_INDEX_HOST");
 
@@ -191,6 +193,7 @@ async function main() {
     provider,
     model,
     dimensions,
+    contextEmbeddingEnabled,
     chunkSize: CHUNK_SIZE,
     chunkOverlap: CHUNK_OVERLAP,
     chunkMinSize: CHUNK_MIN_SIZE,
@@ -202,6 +205,7 @@ async function main() {
   console.log(` Ingestion · corpus "${CORPUS.corpus}"`);
   console.log(`  docs:       ${DOCS_DIR}`);
   console.log(`  embeddings: ${provider} / ${model} @ ${dimensions}d`);
+  console.log(`  contextual: ${contextEmbeddingEnabled ? "enabled" : "disabled"}`);
   console.log(`  pinecone:   ${host || "(not set)"}  namespace=${namespace}`);
   console.log(
     `  chunking:   ${CHUNK_SIZE} chars, ${CHUNK_OVERLAP} overlap` +
@@ -278,7 +282,9 @@ async function main() {
   const flush = async () => {
     if (!pending.length) return;
     const chunks = pending.flatMap((p) => p.chunks);
-    const vectors = chunks.length ? await embedder!.embedDocuments(chunks.map((c) => c.embedText)) : [];
+    const vectors = chunks.length
+      ? await embedDocumentGroups(embedder!, pending.map((p) => p.chunks.map((c) => c.embedText)))
+      : [];
     const records: PineconeRecord[] = chunks.map((c, i) => ({ id: c.id, values: vectors[i], metadata: c.metadata }));
     for (const batch of upsertBatches(records)) await pinecone.upsert(batch);
 
